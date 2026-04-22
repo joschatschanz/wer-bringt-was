@@ -33,10 +33,13 @@
     guestName = getStoredName() || '';
     startPolling();
     document.addEventListener('visibilitychange', onVisibilityChange);
+    // cleanup runs browser-only (onMount return), never on the server
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   });
   onDestroy(() => {
     clearInterval(pollInterval);
-    document.removeEventListener('visibilitychange', onVisibilityChange);
   });
 
   // ── Polling (pauses when tab is hidden) ─────────────────────────
