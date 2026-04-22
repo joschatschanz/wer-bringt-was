@@ -104,36 +104,29 @@
     claimLoading = true;
     claimError   = '';
 
-    const { data: fresh } = await supabase
-      .from('items')
-      .select('quantity_total, claims(amount)')
-      .eq('id', item.id)
-      .single();
-
-    if (fresh?.quantity_total != null) {
-      const claimed = fresh.claims.reduce((s, c) => s + c.amount, 0);
-      const left    = fresh.quantity_total - claimed;
-      if (claimAmount > left) {
-        claimError   = left > 0
-          ? `Jemand war schneller — noch ${left} übrig.`
-          : 'Leider schon komplett gedeckt.';
-        claimAmount  = left > 0 ? left : 1;
-        claimLoading = false;
-        return;
-      }
-    } else if (fresh?.claims?.length > 0) {
-      claimError   = 'Jemand hat das gerade übernommen.';
-      claimLoading = false;
-      return;
-    }
-
-    const { error: e } = await supabase.from('claims').insert({
-      item_id:    item.id,
-      guest_name: guestName,
-      amount:     claimAmount,
+    // Single atomic DB call — prevents race conditions under concurrent load
+    const { data, error: e } = await supabase.rpc('claim_item', {
+      p_item_id:    item.id,
+      p_guest_name: guestName,
+      p_amount:     claimAmount,
     });
 
     if (e) { claimError = 'Fehler — bitte nochmal versuchen.'; claimLoading = false; return; }
+
+    if (!data.success) {
+      if (data.remaining != null) {
+        claimError  = data.remaining > 0
+          ? `Jemand war schneller — noch ${data.remaining} übrig.`
+          : 'Leider schon komplett gedeckt.';
+        claimAmount = data.remaining > 0 ? data.remaining : 1;
+      } else {
+        claimError = data.error === 'already_claimed'
+          ? 'Jemand hat das gerade übernommen.'
+          : 'Fehler beim Eintragen.';
+      }
+      claimLoading = false;
+      return;
+    }
 
     claimLoading = false;
     activeItemId = null;

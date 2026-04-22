@@ -49,3 +49,61 @@ CREATE POLICY "public delete claims" ON claims FOR DELETE USING (true);
 
 -- Update for events (admin edit)
 CREATE POLICY "public update events" ON events FOR UPDATE USING (true);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Atomic claim function — run once in Supabase SQL editor
+-- Uses SELECT FOR UPDATE to lock the row and prevent race conditions when
+-- multiple users claim the same item simultaneously.
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION claim_item(
+  p_item_id    UUID,
+  p_guest_name TEXT,
+  p_amount     INTEGER
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER   -- runs as owner so FOR UPDATE lock works past RLS
+AS $$
+DECLARE
+  v_qty_total  INTEGER;
+  v_claimed    INTEGER;
+  v_left       INTEGER;
+  v_count      INTEGER;
+BEGIN
+  -- Lock this item row; prevents two concurrent claims from both passing the check
+  SELECT quantity_total INTO v_qty_total
+  FROM items WHERE id = p_item_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('success', false, 'error', 'item_not_found');
+  END IF;
+
+  -- No quantity = single-claim item
+  IF v_qty_total IS NULL THEN
+    SELECT COUNT(*) INTO v_count FROM claims WHERE item_id = p_item_id;
+    IF v_count > 0 THEN
+      RETURN jsonb_build_object('success', false, 'error', 'already_claimed');
+    END IF;
+    INSERT INTO claims (item_id, guest_name, amount)
+    VALUES (p_item_id, p_guest_name, 1);
+    RETURN jsonb_build_object('success', true);
+  END IF;
+
+  -- Quantity item: check remaining
+  SELECT COALESCE(SUM(amount), 0) INTO v_claimed FROM claims WHERE item_id = p_item_id;
+  v_left := v_qty_total - v_claimed;
+
+  IF p_amount > v_left THEN
+    RETURN jsonb_build_object('success', false, 'remaining', v_left);
+  END IF;
+
+  INSERT INTO claims (item_id, guest_name, amount)
+  VALUES (p_item_id, p_guest_name, p_amount);
+
+  RETURN jsonb_build_object('success', true);
+END;
+$$;
+
+-- Allow the anon key to call this function
+GRANT EXECUTE ON FUNCTION claim_item TO anon;
