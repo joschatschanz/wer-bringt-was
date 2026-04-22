@@ -259,7 +259,7 @@
     showNameModal  = false;
     editingOwnName = false;
 
-    if (pendingAction?.type === 'claim')   { const a = pendingAction; pendingAction = null; await submitClaim(a.item); }
+    if (pendingAction?.type === 'claim')   { const a = pendingAction; pendingAction = null; activeItemId = null; await submitClaim(a.item); }
     else if (pendingAction?.type === 'addItem') { pendingAction = null; await addItem(false); }
     else pendingAction = null;
 
@@ -366,7 +366,7 @@
           on:click={() => submitClaim(activeItem)}
           disabled={claimLoading}
         >
-          {claimLoading ? '...' : activeItem?.quantity_total != null ? 'Ich bring einen Teil' : 'Ich bring das'}
+          {claimLoading ? '...' : (activeItem?.quantity_total == null || claimAmount >= remaining(activeItem)) ? 'Ich bring das' : 'Ich bring einen Teil'}
         </button>
       </div>
     </div>
