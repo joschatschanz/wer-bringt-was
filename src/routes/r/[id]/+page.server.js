@@ -17,16 +17,23 @@ export async function load({ params, url }) {
     .eq('id', id)
     .single();
 
-  if (evErr || !event) throw error(404, 'Event nicht gefunden');
+  if (evErr) {
+    // PGRST116 = no rows found → real 404; anything else → server error
+    if (evErr.code === 'PGRST116') throw error(404, 'Event nicht gefunden');
+    throw error(500, 'Datenbankfehler: ' + evErr.message);
+  }
+  if (!event) throw error(404, 'Event nicht gefunden');
 
-  const isAdmin = token && token === event.admin_token;
+  const isAdmin = !!(token && token === event.admin_token);
 
   // Load items with their claims
-  const { data: items } = await supabase
+  const { data: items, error: itemsErr } = await supabase
     .from('items')
     .select('*, claims(*)')
     .eq('event_id', id)
     .order('created_at', { ascending: true });
+
+  if (itemsErr) throw error(500, 'Items konnten nicht geladen werden: ' + itemsErr.message);
 
   return {
     event: {

@@ -38,28 +38,37 @@
     loading = true;
     error = '';
 
-    const id = generateEventId();
-    const admin_token = generateToken();
+    try {
+      const id = generateEventId();
+      const admin_token = generateToken();
 
-    const { error: evErr } = await supabase.from('events').insert({
-      id,
-      admin_token,
-      title: title.trim(),
-      date: date.trim() || null,
-      location: location.trim() || null,
-      note: note.trim() || null,
-    });
+      const { error: evErr } = await supabase.from('events').insert({
+        id,
+        admin_token,
+        title: title.trim(),
+        date: date.trim() || null,
+        location: location.trim() || null,
+        note: note.trim() || null,
+      });
 
-    if (evErr) { error = 'Fehler beim Erstellen: ' + evErr.message; loading = false; return; }
+      if (evErr) throw new Error('Event konnte nicht erstellt werden: ' + evErr.message);
 
-    if (items.length > 0) {
-      const { error: itemErr } = await supabase.from('items').insert(
-        items.map(item => ({ event_id: id, name: item.name, quantity_total: item.quantity_total, created_by: 'creator' }))
-      );
-      if (itemErr) { error = 'Items konnten nicht gespeichert werden: ' + itemErr.message; loading = false; return; }
+      if (items.length > 0) {
+        const rows = items.map(item => ({
+          event_id: id,
+          name: item.name,
+          quantity_total: item.quantity_total,
+          created_by: 'creator',
+        }));
+        const { error: itemErr } = await supabase.from('items').insert(rows);
+        if (itemErr) throw new Error('Items konnten nicht gespeichert werden: ' + itemErr.message);
+      }
+
+      await goto(`/r/${id}?token=${admin_token}`);
+    } catch (e) {
+      error = e.message || 'Unbekannter Fehler. Bitte nochmal versuchen.';
+      loading = false;
     }
-
-    goto(`/r/${id}?token=${admin_token}`);
   }
 </script>
 
