@@ -6,9 +6,10 @@
   import { page } from '$app/stores';
   import { invalidateAll } from '$app/navigation';
   import { supabase } from '$lib/supabase.js';
+  import { goto } from '$app/navigation';
   import {
     totalClaimed, remaining, itemStatus, statusLabel, statusBadgeClass,
-    getStoredName, setStoredName
+    getStoredName, setStoredName, getAdminToken
   } from '$lib/utils.js';
 
   export let data;
@@ -31,6 +32,15 @@
 
   onMount(() => {
     guestName = getStoredName() || '';
+
+    // Restore admin access: if no token in URL but we saved one locally, redirect
+    if (!isAdmin) {
+      const saved = getAdminToken(event.id);
+      if (saved) {
+        goto(`/r/${event.id}?token=${saved}`, { replaceState: true });
+      }
+    }
+
     startPolling();
     document.addEventListener('visibilitychange', onVisibilityChange);
     // cleanup runs browser-only (onMount return), never on the server
@@ -84,6 +94,11 @@
 
   function openClaim(item) {
     if (itemStatus(item) === 'full') return;
+    // Prevent double-claiming: if user already has an entry, show hint instead
+    if (guestName && item.claims?.some(c => c.guest_name === guestName)) {
+      showToast('Du hast das bereits eingetragen — klick auf ✕ zum Ändern.');
+      return;
+    }
     activeItemId = item.id;
     claimAmount  = remaining(item) ?? 1;
     claimError   = '';

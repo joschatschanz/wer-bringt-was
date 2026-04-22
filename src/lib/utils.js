@@ -42,7 +42,7 @@ export function statusBadgeClass(status) {
   return 'badge badge-open';
 }
 
-/** localStorage helpers */
+/** localStorage helpers — guest name */
 export function getStoredName() {
   if (typeof localStorage === 'undefined') return null;
   return localStorage.getItem('wbw_name') || null;
@@ -51,4 +51,24 @@ export function getStoredName() {
 export function setStoredName(name) {
   if (typeof localStorage === 'undefined') return;
   localStorage.setItem('wbw_name', name);
+}
+
+/** My Events — admin links saved locally so the organiser never loses access */
+export function getMyEvents() {
+  if (typeof localStorage === 'undefined') return [];
+  try { return JSON.parse(localStorage.getItem('wbw_my_events') || '[]'); }
+  catch { return []; }
+}
+
+export function saveMyEvent({ id, title, admin_token, date, location }) {
+  if (typeof localStorage === 'undefined') return;
+  const existing = getMyEvents().filter(e => e.id !== id); // deduplicate
+  existing.unshift({ id, title, admin_token, date: date || null, location: location || null, savedAt: Date.now() });
+  localStorage.setItem('wbw_my_events', JSON.stringify(existing.slice(0, 30)));
+}
+
+/** Returns saved admin token for a given event id, or null */
+export function getAdminToken(eventId) {
+  if (typeof localStorage === 'undefined') return null;
+  return getMyEvents().find(e => e.id === eventId)?.admin_token ?? null;
 }

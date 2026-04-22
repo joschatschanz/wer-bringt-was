@@ -1,6 +1,7 @@
 <script>
   import '../app.css';
-  import { generateEventId, generateToken } from '$lib/utils.js';
+  import { onMount } from 'svelte';
+  import { generateEventId, generateToken, getMyEvents, saveMyEvent } from '$lib/utils.js';
   import { supabase } from '$lib/supabase.js';
   import { goto } from '$app/navigation';
   import DatePicker from '$lib/DatePicker.svelte';
@@ -15,6 +16,10 @@
   let items = [];
   let loading = false;
   let error = '';
+
+  // My Events — loaded client-side from localStorage
+  let myEvents = [];
+  onMount(() => { myEvents = getMyEvents(); });
 
   function addItem() {
     const name = itemName.trim();
@@ -64,6 +69,9 @@
         if (itemErr) throw new Error('Items konnten nicht gespeichert werden: ' + itemErr.message);
       }
 
+      // Save admin link locally so organiser can always find it again
+      saveMyEvent({ id, title: title.trim(), admin_token, date: date.trim() || null, location: location.trim() || null });
+
       await goto(`/r/${id}?token=${admin_token}`);
     } catch (e) {
       error = e.message || 'Unbekannter Fehler. Bitte nochmal versuchen.';
@@ -80,6 +88,35 @@
       <h1 style="font-size:3rem; color:var(--primary); margin-bottom:0.5rem;">Was bringst du mit?</h1>
       <p style="color:var(--text-muted); font-size:1.1rem;">Erstell eine Liste, teil den Link — fertig.</p>
     </div>
+
+    <!-- My Events — only shown if this browser has created events before -->
+    {#if myEvents.length > 0}
+      <div class="card" style="margin-bottom:1.5rem;">
+        <p style="font-size:0.85rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:0.9rem;">🗂 Deine Events</p>
+        <div style="display:flex; flex-direction:column; gap:0.55rem;">
+          {#each myEvents as ev}
+            <div style="display:flex; align-items:center; gap:0.75rem; background:var(--bg); padding:0.55rem 0.85rem; border-radius:var(--radius-sm);">
+              <div style="flex:1; min-width:0;">
+                <span style="font-family:var(--font-hand); font-size:1.1rem; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{ev.title}</span>
+                {#if ev.date || ev.location}
+                  <span style="font-size:0.78rem; color:var(--text-muted);">
+                    {#if ev.date}{ev.date}{/if}{#if ev.date && ev.location} · {/if}{#if ev.location}{ev.location}{/if}
+                  </span>
+                {/if}
+              </div>
+              <a
+                href="/r/{ev.id}"
+                style="font-size:0.8rem; color:var(--text-muted); text-decoration:none; padding:0.2rem 0.5rem; border-radius:var(--radius-sm); border:1.5px solid var(--border);"
+              >Gast</a>
+              <a
+                href="/r/{ev.id}?token={ev.admin_token}"
+                style="font-size:0.8rem; color:var(--primary); text-decoration:none; padding:0.2rem 0.5rem; border-radius:var(--radius-sm); border:1.5px solid var(--primary); font-weight:700;"
+              >Admin →</a>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
 
     <div class="card" style="display:flex; flex-direction:column; gap:1.25rem;">
       <!-- Event-Infos -->
